@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Network Packet Simulator</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Font Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+        .code-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        /* Custom scrollbar for control panels and logs */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col bg-slate-900 text-slate-100">
+
+    <!-- HEADER LAYOUT TAG -->
+    <header class="bg-slate-800 border-b border-slate-700 px-4 py-3 shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div class="flex items-center space-x-3">
+                <div class="p-2 bg-indigo-600 rounded-lg text-white shadow-md shadow-indigo-500/20">
+                    <i class="fa-solid font-bold fa-network-wired text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold bg-gradient-to-r from-indigo-400 to-cyan-400 bg-clip-text text-transparent">
+                        Packet Flow Simulator
+                    </h1>
+                    <p class="text-xs text-slate-400">Visualizing Internet Protocol & Network Hops</p>
+                </div>
+            </div>
+            <!-- Quick Status Badge -->
+            <div class="flex items-center gap-2 bg-slate-900/80 px-3 py-1.5 rounded-full border border-slate-700 text-xs">
+                <span class="relative flex h-2.5 w-2.5">
+                    <span id="status-ping-ping" class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span id="status-ping-dot" class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+                </span>
+                <span id="status-text" class="text-slate-300 font-medium">Ready for transmission</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- NAVIGATION LAYOUT TAG -->
+    <nav class="bg-slate-800/60 border-b border-slate-700/50 px-4 py-2 text-xs">
+        <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center space-x-1 sm:space-x-4">
+                <span class="text-slate-400 font-semibold uppercase tracking-wider text-[10px]">Presets:</span>
+                <button onclick="presetHTTP()" class="px-2.5 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 transition text-xs font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-globe text-cyan-400"></i> HTTP Request (GET)
+                </button>
+                <button onclick="presetDNS()" class="px-2.5 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 transition text-xs font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-server text-purple-400"></i> DNS Lookup
+                </button>
+                <button onclick="presetPing()" class="px-2.5 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-200 transition text-xs font-medium flex items-center gap-1.5">
+                    <i class="fa-solid fa-bolt text-amber-400"></i> ICMP Ping
+                </button>
+            </div>
+            
+            <div class="flex items-center space-x-3">
+                <label class="flex items-center space-x-2 text-slate-300 cursor-pointer">
+                    <input type="checkbox" id="chk-drop" class="rounded bg-slate-700 border-slate-600 text-indigo-600 focus:ring-indigo-500">
+                    <span>Simulate Packet Loss (15%)</span>
+                </label>
+            </div>
+        </div>
+    </nav>
+
+    <!-- MAIN CONTENT LAYOUT TAG -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-4 flex flex-col gap-4">
+        
+        <!-- TOP CONTROL PANEL -->
+        <section class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-sm">
+            <form id="sim-form" onsubmit="event.preventDefault(); startSimulation();" class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Protocol / Mode</label>
+                    <select id="protocol-select" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-indigo-500 transition">
+                        <option value="HTTP">HTTP (TCP 3-Way + GET)</option>
+                        <option value="DNS">DNS Query (UDP/53)</option>
+                        <option value="PING">ICMP Echo Request (Ping)</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">Destination Domain/IP</label>
+                    <input type="text" id="target-domain" value="example.com" placeholder="e.g. google.com" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 code-font focus:outline-none focus:border-indigo-500 transition">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1">
+                        Sim Speed: <span id="speed-val" class="text-indigo-400 font-mono">1.0x</span>
+                    </label>
+                    <input type="range" id="speed-range" min="0.2" max="3" step="0.1" value="1" oninput="document.getElementById('speed-val').innerText = this.value + 'x'" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+                </div>
+
+                <div class="flex gap-2">
+                    <button type="submit" id="btn-send" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2 px-4 rounded-lg shadow-lg shadow-indigo-600/30 transition flex items-center justify-center gap-2">
+                        <i class="fa-solid fa-paper-plane"></i> Send Packet
+                    </button>
+                    <button type="button" onclick="resetSimulation()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium py-2 px-3 rounded-lg transition" title="Reset Network Topology">
+                        <i class="fa-solid fa-rotate-right"></i>
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <!-- VISUALIZATION CANVAS & INSPECTOR GRID -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 flex-1">
+            
+            <!-- CANVAS CONTAINER (2 Cols on Large Screens) -->
+            <div class="lg:col-span-2 bg-slate-800 border border-slate-700 rounded-xl p-3 flex flex-col relative min-h-[380px] shadow-md">
+                <div class="flex items-center justify-between mb-2 px-2">
+                    <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                        <i class="fa-solid fa-diagram-project text-indigo-400"></i> Network Topology Map
+                    </h2>
+                    <div class="flex items-center gap-3 text-xs text-slate-400">
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> Client</span>
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-blue-500 inline-block"></span> Router</span>
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block"></span> DNS</span>
+                        <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span> Web Server</span>
+                    </div>
+                </div>
+
+                <div class="relative flex-1 w-full h-full bg-slate-950 rounded-lg overflow-hidden border border-slate-900">
+                    <canvas id="netCanvas" class="w-full h-full block cursor-crosshair"></canvas>
+                    
+                    <!-- Overlay Legend / Help -->
+                    <div class="absolute bottom-2 left-2 bg-slate-900/80 backdrop-blur border border-slate-800 text-[11px] text-slate-400 px-2.5 py-1.5 rounded pointer-events-none">
+                        <i class="fa-solid fa-info-circle text-indigo-400 mr-1"></i> Click nodes to inspect parameters
+                    </div>
+                </div>
+            </div>
+
+            <!-- INSPECTOR & PACKET DETAILS PANEL (1 Col) -->
+            <div class="flex flex-col gap-4">
+                
+                <!-- PACKET INSPECTOR -->
+                <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 flex-1 flex flex-col shadow-sm">
+                    <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
+                        <span><i class="fa-solid fa-box-open text-cyan-400 mr-1.5"></i> Packet Header Inspector</span>
+                        <span id="active-packet-badge" class="px-2 py-0.5 rounded text-[10px] bg-slate-700 text-slate-300 font-mono">NO ACTIVE PACKET</span>
+                    </h2>
+
+                    <div id="inspector-content" class="bg-slate-900 border border-slate-700/60 rounded-lg p-3 flex-1 flex flex-col justify-center text-xs code-font text-slate-300 gap-2">
+                        <div class="text-center text-slate-500 italic font-sans py-8">
+                            Click 'Send Packet' to observe packet creation, encapsulated headers, and transmission payloads.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- EVENT LOG & CONSOLE -->
+                <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 h-48 flex flex-col shadow-sm">
+                    <div class="flex items-center justify-between mb-2">
+                        <h2 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                            <i class="fa-solid fa-terminal text-emerald-400"></i> Event Log
+                        </h2>
+                        <button onclick="clearLogs()" class="text-[11px] text-slate-500 hover:text-slate-300 transition">Clear</button>
+                    </div>
+                    <div id="log-console" class="flex-1 bg-slate-950 border border-slate-900 rounded-lg p-2.5 overflow-y-auto font-mono text-[11px] space-y-1.5">
+                        <div class="text-slate-500">[00:00:00] Network simulation initialized. Ready.</div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- EDU EXPANDER SECTION -->
+        <section class="bg-slate-800/80 border border-slate-700 rounded-xl p-4 shadow-sm">
+            <h3 class="text-sm font-semibold text-slate-200 mb-2 flex items-center gap-2">
+                <i class="fa-solid fa-graduation-cap text-indigo-400"></i> How Internet Packet Routing Works
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-slate-400 leading-relaxed">
+                <div class="bg-slate-900/50 p-3 rounded-lg border border-slate-700/40">
+                    <h4 class="font-semibold text-slate-200 mb-1 text-xs flex items-center gap-1.5">
+                        <span class="w-4 h-4 rounded-full bg-indigo-600/30 text-indigo-400 text-[10px] flex items-center justify-center font-bold">1</span>
+                        DNS Lookup (UDP)
+                    </h4>
+                    Before a client connects to a server domain (like <code>example.com</code>), it sends a fast, lightweight UDP query on Port 53 to resolve the human-friendly URL into a numerical IPv4/IPv6 address.
+                </div>
+                <div class="bg-slate-900/50 p-3 rounded-lg border border-slate-700/40">
+                    <h4 class="font-semibold text-slate-200 mb-1 text-xs flex items-center gap-1.5">
+                        <span class="w-4 h-4 rounded-full bg-indigo-600/30 text-indigo-400 text-[10px] flex items-center justify-center font-bold">2</span>
+                        TCP 3-Way Handshake
+                    </h4>
+                    For reliable protocols like HTTP, a connection must be established before sending data. This is done via SYN (Synchronize), SYN-ACK (Acknowledge), and ACK packets to sync sequence numbers.
+                </div>
+                <div class="bg-slate-900/50 p-3 rounded-lg border border-slate-700/40">
+                    <h4 class="font-semibold text-slate-200 mb-1 text-xs flex items-center gap-1.5">
+                        <span class="w-4 h-4 rounded-full bg-indigo-600/30 text-indigo-400 text-[10px] flex items-center justify-center font-bold">3</span>
+                        Router Hops & TTL
+                    </h4>
+                    Packets travel across intermediate switches and routers. Each router decrements the packet's Time-To-Live (TTL) field by 1. If TTL hits 0, the packet is discarded to prevent infinite looping.
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- FOOTER LAYOUT TAG -->
+    <footer class="bg-slate-800 border-t border-slate-700 py-3 px-4 text-center text-xs text-slate-400 mt-auto">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+            <div>
+                <span class="font-semibold text-slate-300">Interactive Packet Simulator</span> &copy; 2026. Educational Web Tool.
+            </div>
+            <div class="flex items-center space-x-4 text-slate-400">
+                <span class="hover:text-slate-200 transition cursor-pointer" onclick="presetHTTP()"><i class="fa-solid fa-code text-indigo-400 mr-1"></i> HTTP</span>
+                <span class="hover:text-slate-200 transition cursor-pointer" onclick="presetDNS()"><i class="fa-solid fa-network-wired text-purple-400 mr-1"></i> DNS</span>
+                <span class="hover:text-slate-200 transition cursor-pointer" onclick="presetPing()"><i class="fa-solid fa-terminal text-amber-400 mr-1"></i> ICMP</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- SIMULATION LOGIC & CANVAS ENGINE -->
+    <script>
+        // Node Network Definitions
+        let nodes = [];
+        let connections = [];
+        let activePackets = [];
+        let selectedNode = null;
+        let isSimulating = false;
+        
+        // Canvas & Context Setup
+        const canvas = document.getElementById('netCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Resize Canvas to fit container dynamically
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
+            setupNetworkTopology();
+        }
+
+        // Initialize Topology Nodes & Links
+        function setupNetworkTopology() {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            nodes = [
+                { id: 'client', label: 'Local Client', ip: '192.168.1.105', mac: 'A4:5E:60:11:22:33', type: 'client', x: w * 0.12, y: h * 0.5, color: '#10b981', icon: '\uf109' },
+                { id: 'router1', label: 'Local Gateway', ip: '192.168.1.1', mac: 'C8:00:84:AA:BB:CC', type: 'router', x: w * 0.32, y: h * 0.35, color: '#3b82f6', icon: '\uf012' },
+                { id: 'dns', label: 'DNS Server', ip: '8.8.8.8', mac: '00:1A:2B:3C:4D:5E', type: 'dns', x: w * 0.32, y: h * 0.75, color: '#a855f7', icon: '\uf233' },
+                { id: 'isp', label: 'ISP Core Router', ip: '172.16.254.1', mac: '00:11:22:33:44:55', type: 'router', x: w * 0.58, y: h * 0.35, color: '#3b82f6', icon: '\uf012' },
+                { id: 'server', label: 'Web Server', ip: '93.184.216.34', mac: '70:85:C2:DE:FA:01', type: 'server', x: w * 0.85, y: h * 0.5, color: '#f59e0b', icon: '\uf233' }
+            ];
+
+            connections = [
+                { from: 'client', to: 'router1' },
+                { from: 'client', to: 'dns' },
+                { from: 'router1', to: 'isp' },
+                { from: 'isp', to: 'server' }
+            ];
+        }
+
+        // Helper: Find Node by ID
+        function getNode(id) {
+            return nodes.find(n => n.id === id);
+        }
+
+        // Log Console Helper
+        function logEvent(msg, type = 'info') {
+            const consoleEl = document.getElementById('log-console');
+            const time = new Date().toLocaleTimeString().split(' ')[0];
+            
+            let colorClass = 'text-slate-300';
+            if (type === 'success') colorClass = 'text-emerald-400';
+            if (type === 'warn') colorClass = 'text-amber-400';
+            if (type === 'error') colorClass = 'text-rose-400';
+            if (type === 'dns') colorClass = 'text-purple-400';
+            if (type === 'tcp') colorClass = 'text-cyan-400';
+
+            const line = document.createElement('div');
+            line.className = colorClass;
+            line.innerHTML = `<span class="text-slate-600">[${time}]</span> ${msg}`;
+            consoleEl.appendChild(line);
+            consoleEl.scrollTop = consoleEl.scrollHeight;
+        }
+
+        function clearLogs() {
+            document.getElementById('log-console').innerHTML = '<div class="text-slate-500">[00:00:00] Event log cleared.</div>';
+        }
+
+        // Form Presets
+        function presetHTTP() {
+            document.getElementById('protocol-select').value = 'HTTP';
+            document.getElementById('target-domain').value = 'example.com';
+            logEvent("Preset loaded: HTTP Web Request", "info");
+        }
+
+        function presetDNS() {
+            document.getElementById('protocol-select').value = 'DNS';
+            document.getElementById('target-domain').value = 'dns.lookup.org';
+            logEvent("Preset loaded: DNS Resolution Query", "info");
+        }
+
+        function presetPing() {
+            document.getElementById('protocol-select').value = 'PING';
+            document.getElementById('target-domain').value = '1.1.1.1';
+            logEvent("Preset loaded: ICMP Echo Ping", "info");
+        }
+
+        // Update Header Status UI
+        function setStatus(text, active = false) {
+            document.getElementById('status-text').innerText = text;
+            const pingDot = document.getElementById('status-ping-ping');
+            if (active) {
+                pingDot.classList.remove('hidden');
+            } else {
+                pingDot.classList.add('hidden');
+            }
+        }
+
+        // Update Packet Inspector UI
+        function updateInspector(packet) {
+            const badge = document.getElementById('active-packet-badge');
+            const container = document.getElementById('inspector-content');
+
+            if (!packet) {
+                badge.innerText = 'NO ACTIVE PACKET';
+                badge.className = 'px-2 py-0.5 rounded text-[10px] bg-slate-700 text-slate-300 font-mono';
+                container.innerHTML = `<div class="text-center text-slate-500 italic font-sans py-8">Select or initiate packet transfer to inspect header details.</div>`;
+                return;
+            }
+
+            badge.innerText = `${packet.protocol} PACKET #${packet.id}`;
+            badge.className = 'px-2 py-0.5 rounded text-[10px] bg-indigo-600 text-white font-mono font-bold';
+
+            container.innerHTML = `
+                <div class="grid grid-cols-2 gap-2 border-b border-slate-800 pb-2 mb-2">
+                    <div><span class="text-slate-500">Source IP:</span> <span class="text-emerald-400">${packet.srcIp}</span></div>
+                    <div><span class="text-slate-500">Dest IP:</span> <span class="text-amber-400">${packet.dstIp}</span></div>
+                    <div><span class="text-slate-500">Source MAC:</span> <span class="text-slate-300 text-[10px]">${packet.srcMac || 'AUTO'}</span></div>
+                    <div><span class="text-slate-500">Dest MAC:</span> <span class="text-slate-300 text-[10px]">${packet.dstMac || 'AUTO'}</span></div>
+                </div>
+                <div class="grid grid-cols-3 gap-1 bg-slate-950 p-2 rounded border border-slate-800 text-[11px]">
+                    <div><span class="text-slate-500">Protocol:</span> <br><strong class="text-cyan-300">${packet.protocol}</strong></div>
+                    <div><span class="text-slate-500">TTL:</span> <br><strong class="text-indigo-300">${packet.ttl}</strong></div>
+                    <div><span class="text-slate-500">Payload Size:</span> <br><strong class="text-purple-300">${packet.payloadSize || '64 Bytes'}</strong></div>
+                </div>
+                <div class="mt-2 bg-slate-950 p-2 rounded border border-slate-800">
+                    <span class="text-slate-500 text-[10px]">L7 Payload Info:</span>
+                    <div class="text-slate-200 mt-0.5 font-bold truncate">${packet.info || 'N/A'}</div>
+                </div>
+            `;
+        }
+
+        // Main Execution Entrypoint
+        async function startSimulation() {
+            if (isSimulating) return;
+            isSimulating = true;
+
+            const protocol = document.getElementById('protocol-select').value;
+            const domain = document.getElementById('target-domain').value || 'example.com';
+            const dropChance = document.getElementById('chk-drop').checked;
+
+            const btnSend = document.getElementById('btn-send');
+            btnSend.disabled = true;
+            btnSend.classList.add('opacity-50');
+
+            setStatus(`Executing ${protocol} Flow...`, true);
+
+            if (protocol === 'DNS') {
+                await runDNSQuery(domain, dropChance);
+            } else if (protocol === 'PING') {
+                await runPingFlow(domain, dropChance);
+            } else if (protocol === 'HTTP') {
+                logEvent(`Starting HTTP Request sequence to ${domain}`, 'tcp');
+                // 1. DNS First
+                const dnsSuccess = await runDNSQuery(domain, dropChance);
+                if (dnsSuccess) {
+                    // 2. TCP Handshake
+                    const tcpSuccess = await runTCPHandshake(dropChance);
+                    if (tcpSuccess) {
+                        // 3. HTTP GET
+                        await runHTTPDataFlow(domain, dropChance);
+                    }
+                }
+            }
+
+            setStatus("Ready for transmission", false);
+            isSimulating = false;
+            btnSend.disabled = false;
+            btnSend.classList.remove('opacity-50');
+        }
+
+        // Single Packet Movement Promise
+        function sendPacket(fromId, toId, options = {}) {
+            return new Promise((resolve) => {
+                const fromNode = getNode(fromId);
+                const toNode = getNode(toId);
+                const speed = parseFloat(document.getElementById('speed-range').value);
+
+                const packet = {
+                    id: Math.floor(Math.random() * 9000 + 1000),
+                    srcIp: options.srcIp || fromNode.ip,
+                    dstIp: options.dstIp || toNode.ip,
+                    srcMac: fromNode.mac,
+                    dstMac: toNode.mac,
+                    protocol: options.protocol || 'IPv4',
+                    info: options.info || 'Data Packet',
+                    payloadSize: options.size || '128 Bytes',
+                    ttl: options.ttl || 64,
+                    color: options.color || '#38bdf8',
+                    
+                    // Coordinates & Progress
+                    startX: fromNode.x,
+                    startY: fromNode.y,
+                    endX: toNode.x,
+                    endY: toNode.y,
+                    x: fromNode.x,
+                    y: fromNode.y,
+                    progress: 0,
+                    speed: 0.015 * speed,
+                    
+                    // Callbacks
+                    onComplete: resolve
+                };
+
+                // Check simulated packet drop
+                if (options.canDrop && Math.random() < 0.15) {
+                    packet.willDrop = true;
+                }
+
+                activePackets.push(packet);
+                updateInspector(packet);
+            });
+        }
+
+        // PROTOCOL FLOWS
+
+        async function runDNSQuery(domain, dropChance) {
+            logEvent(`[DNS] Client querying local DNS for '${domain}'`, 'dns');
+            
+            const reqSuccess = await sendPacket('client', 'dns', {
+                protocol: 'UDP/DNS',
+                info: `Standard Query A: ${domain}`,
+                color: '#a855f7',
+                canDrop: dropChance
+            });
+
+            if (!reqSuccess) {
+                logEvent(`[DNS Error] Query packet lost in transit to DNS Server!`, 'error');
+                return false;
+            }
+
+            logEvent(`[DNS] DNS Server resolved ${domain} -> 93.184.216.34`, 'dns');
+
+            const resSuccess = await sendPacket('dns', 'client', {
+                protocol: 'UDP/DNS',
+                info: `Response A: 93.184.216.34`,
+                color: '#c084fc',
+                canDrop: dropChance
+            });
+
+            if (!resSuccess) {
+                logEvent(`[DNS Error] Response packet dropped returning to Client!`, 'error');
+                return false;
+            }
+
+            logEvent(`[DNS] Resolved domain successfully.`, 'success');
+            return true;
+        }
+
+        async function runTCPHandshake(dropChance) {
+            logEvent(`[TCP] Initiating 3-Way Handshake: Sending SYN...`, 'tcp');
+            
+            // SYN
+            let p1 = await sendPacketThroughRouters('client', 'server', {
+                protocol: 'TCP',
+                info: '[SYN] Seq=0 Win=64240',
+                color: '#38bdf8',
+                canDrop: dropChance
+            });
+
+            if (!p1) {
+                logEvent(`[TCP Error] SYN packet lost in transit. Connection failed.`, 'error');
+                return false;
+            }
+
+            // SYN-ACK
+            logEvent(`[TCP] Server responded with SYN-ACK. Sending ACK...`, 'tcp');
+            let p2 = await sendPacketThroughRouters('server', 'client', {
+                protocol: 'TCP',
+                info: '[SYN, ACK] Seq=0 Ack=1',
+                color: '#06b6d4',
+                canDrop: dropChance
+            });
+
+            if (!p2) {
+                logEvent(`[TCP Error] SYN-ACK dropped in return hop.`, 'error');
+                return false;
+            }
+
+            // ACK
+            let p3 = await sendPacketThroughRouters('client', 'server', {
+                protocol: 'TCP',
+                info: '[ACK] Seq=1 Ack=1',
+                color: '#38bdf8',
+                canDrop: dropChance
+            });
+
+            if (!p3) {
+                logEvent(`[TCP Error] Final ACK lost. Handshake incomplete.`, 'error');
+                return false;
+            }
+
+            logEvent(`[TCP] Connection established! (ESTABLISHED)`, 'success');
+            return true;
+        }
+
+        async function runHTTPDataFlow(domain, dropChance) {
+            logEvent(`[HTTP] Client requesting payload: GET / HTTP/1.1`, 'info');
+
+            let req = await sendPacketThroughRouters('client', 'server', {
+                protocol: 'HTTP',
+                info: `GET / HTTP/1.1 Host: ${domain}`,
+                color: '#f59e0b',
+                size: '512 Bytes',
+                canDrop: dropChance
+            });
+
+            if (!req) {
+                logEvent(`[HTTP Error] HTTP Request dropped!`, 'error');
+                return;
+            }
+
+            logEvent(`[HTTP] Server responding: 200 OK (HTML Payload)`, 'success');
+
+            let res = await sendPacketThroughRouters('server', 'client', {
+                protocol: 'HTTP',
+                info: 'HTTP/1.1 200 OK (text/html)',
+                color: '#10b981',
+                size: '2.4 KB',
+                canDrop: dropChance
+            });
+
+            if (!res) {
+                logEvent(`[HTTP Error] HTTP Response dropped before reaching client!`, 'error');
+                return;
+            }
+
+            logEvent(`[HTTP] Web page successfully loaded & rendered!`, 'success');
+        }
+
+        async function runPingFlow(target, dropChance) {
+            logEvent(`[ICMP] Pinging ${target} with 32 bytes of data:`, 'warn');
+
+            let ok = await sendPacketThroughRouters('client', 'server', {
+                protocol: 'ICMP',
+                info: `Echo (ping) request id=0x0001 seq=1`,
+                color: '#f59e0b',
+                size: '32 Bytes',
+                canDrop: dropChance
+            });
+
+            if (!ok) {
+                logEvent(`[ICMP] Request timed out. (Packet Lost)`, 'error');
+                return;
+            }
+
+            let okReply = await sendPacketThroughRouters('server', 'client', {
+                protocol: 'ICMP',
+                info: `Echo (ping) reply id=0x0001 seq=1 time=24ms`,
+                color: '#10b981',
+                size: '32 Bytes',
+                canDrop: dropChance
+            });
+
+            if (!okReply) {
+                logEvent(`[ICMP] Echo reply dropped. Target unreachable.`, 'error');
+                return;
+            }
+
+            logEvent(`[ICMP] Reply from ${target}: bytes=32 time=24ms TTL=56`, 'success');
+        }
+
+        // Multi-hop routing helper (Client -> Router1 -> ISP -> Server or reverse)
+        async function sendPacketThroughRouters(fromId, toId, options) {
+            let path = [];
+            if (fromId === 'client' && toId === 'server') {
+                path = ['client', 'router1', 'isp', 'server'];
+            } else if (fromId === 'server' && toId === 'client') {
+                path = ['server', 'isp', 'router1', 'client'];
+            } else {
+                path = [fromId, toId];
+            }
+
+            let currentTtl = options.ttl || 64;
+
+            for (let i = 0; i < path.length - 1; i++) {
+                let hopFrom = path[i];
+                let hopTo = path[i+1];
+                
+                // Decrement TTL at each router
+                if (getNode(hopFrom).type === 'router') {
+                    currentTtl--;
+                }
+
+                let success = await sendPacket(hopFrom, hopTo, {
+                    ...options,
+                    ttl: currentTtl
+                });
+
+                if (!success) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        // Reset topology & state
+        function resetSimulation() {
+            activePackets = [];
+            selectedNode = null;
+            updateInspector(null);
+            logEvent("Simulation topology reset.", "info");
+            setStatus("Ready for transmission", false);
+        }
+
+        // RENDER / CANVAS ANIMATION LOOP
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. Draw Connections (Links)
+            connections.forEach(conn => {
+                const n1 = getNode(conn.from);
+                const n2 = getNode(conn.to);
+
+                ctx.beginPath();
+                ctx.moveTo(n1.x, n1.y);
+                ctx.lineTo(n2.x, n2.y);
+                ctx.strokeStyle = '#334155';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([4, 4]);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            });
+
+            // 2. Update & Draw Packets
+            for (let i = activePackets.length - 1; i >= 0; i--) {
+                const p = activePackets[i];
+                p.progress += p.speed;
+
+                // Handle Dropped Packet Animation midway
+                if (p.willDrop && p.progress >= 0.5) {
+                    // Draw Drop Burst Effect
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(244, 63, 94, 0.4)';
+                    ctx.fill();
+
+                    activePackets.splice(i, 1);
+                    p.onComplete(false); // Resolve promise with failure
+                    continue;
+                }
+
+                if (p.progress >= 1) {
+                    p.x = p.endX;
+                    p.y = p.endY;
+                    activePackets.splice(i, 1);
+                    p.onComplete(true); // Resolve promise with success
+                    continue;
+                }
+
+                // Interpolate Current Position
+                p.x = p.startX + (p.endX - p.startX) * p.progress;
+                p.y = p.startY + (p.endY - p.startY) * p.progress;
+
+                // Draw Packet Glow & Body
+                ctx.shadowColor = p.color;
+                ctx.shadowBlur = 10;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+                ctx.fillStyle = p.color;
+                ctx.fill();
+                ctx.shadowBlur = 0; // Reset Shadow
+
+                // Draw Protocol Badge above packet
+                ctx.font = '10px "JetBrains Mono"';
+                ctx.fillStyle = '#f8fafc';
+                ctx.textAlign = 'center';
+                ctx.fillText(p.protocol, p.x, p.y - 12);
+            }
+
+            // 3. Draw Nodes
+            nodes.forEach(node => {
+                const isSelected = selectedNode === node;
+
+                // Outer Node Circle Glow
+                if (isSelected) {
+                    ctx.beginPath();
+                    ctx.arc(node.x, node.y, 28, 0, Math.PI * 2);
+                    ctx.fillStyle = 'rgba(99, 102, 241, 0.2)';
+                    ctx.fill();
+                    ctx.strokeStyle = '#6366f1';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+
+                // Node Base Circle
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 20, 0, Math.PI * 2);
+                ctx.fillStyle = '#1e293b';
+                ctx.fill();
+                ctx.strokeStyle = node.color;
+                ctx.lineWidth = 3;
+                ctx.stroke();
+
+                // Draw FontAwesome Node Icon
+                ctx.font = '900 14px "Font Awesome 6 Free"';
+                ctx.fillStyle = node.color;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(node.icon, node.x, node.y);
+
+                // Draw Labels
+                ctx.textBaseline = 'alphabetic';
+                ctx.font = 'bold 11px Inter';
+                ctx.fillStyle = '#f8fafc';
+                ctx.fillText(node.label, node.x, node.y + 36);
+
+                ctx.font = '10px "JetBrains Mono"';
+                ctx.fillStyle = '#94a3b8';
+                ctx.fillText(node.ip, node.x, node.y + 49);
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        // Click Handler for Canvas Nodes Interaction
+        canvas.addEventListener('click', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            let clicked = null;
+            nodes.forEach(node => {
+                const dist = Math.hypot(node.x - clickX, node.y - clickY);
+                if (dist <= 22) {
+                    clicked = node;
+                }
+            });
+
+            if (clicked) {
+                selectedNode = clicked;
+                logEvent(`Selected Node: ${clicked.label} [${clicked.ip}]`, 'info');
+            } else {
+                selectedNode = null;
+            }
+        });
+
+        // Window Initialization
+        window.onload = function() {
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+            animate();
+        };
+    </script>
+</body>
+</html>
